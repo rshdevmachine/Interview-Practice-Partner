@@ -1,8 +1,16 @@
-# Interview Practice Partner
+# Voice Interview Practice Partner
 
 ## Overview
 
-Interview Practice Partner is an AI-powered mock interview application that helps users practice for job interviews across various roles. The system uses Google's Gemini AI to simulate realistic interview conversations, providing an interactive chat interface where users can practice their responses and receive constructive feedback. The application supports multiple interview types including software engineering, product management, retail, customer service, sales, healthcare, and teaching positions.
+Voice Interview Practice Partner is an AI-powered voiceover interview application that helps users practice for job interviews through natural voice-based conversation. The system uses Google's Gemini AI to simulate realistic interview conversations with text-to-speech audio playback for the interviewer and speech-to-text for user responses. Users can practice multiple interview types including software engineering, product management, retail, customer service, sales, healthcare, and teaching positions.
+
+**Recent Changes (Voiceover Conversion):**
+- Replaced text-only chat interface with voice-first interaction
+- Added browser-based text-to-speech (TTS) for AI interviewer responses
+- Integrated play/pause/stop controls for audio responses
+- Auto-play AI responses for seamless voiceover experience
+- Reordered input modes with voice as primary method
+- Updated home page messaging to emphasize voiceover capability
 
 ## User Preferences
 
@@ -28,12 +36,18 @@ Preferred communication style: Simple, everyday language.
 **State Management**
 - **TanStack Query (React Query)**: Server state management with automatic caching, refetching, and optimistic updates
 - **React Hooks**: Local component state using useState, useEffect, useRef
-- **Custom Hooks**: Reusable logic for speech recognition, mobile detection, and toast notifications
+- **Custom Hooks**: Reusable logic for speech recognition, text-to-speech, mobile detection, and toast notifications
+
+**Audio Integration**
+- **Web Speech API (SpeechSynthesis)**: Browser-based text-to-speech for AI responses
+- **Speech Recognition**: Browser-based speech-to-text for user voice input
+- **useTextToSpeech Hook**: Custom hook managing TTS lifecycle with play/pause/stop/resume controls
+- **useSpeechRecognition Hook**: Existing custom hook for capturing user voice input
 
 **Layout Structure**
 - **Responsive Design**: Desktop sidebar layout transitioning to mobile-first single column
 - **Sidebar Navigation**: Fixed sidebar with role selection, session history, and new interview button
-- **Main Content Area**: Chat interface with message bubbles, feedback cards, and input controls
+- **Main Content Area**: Voice-focused interface with message bubbles, audio playback controls, and voice input
 
 ### Backend Architecture
 
@@ -105,6 +119,36 @@ Preferred communication style: Simple, everyday language.
 - **Drizzle Kit**: Database migration and schema management CLI
 
 **Browser APIs**
-- **Web Speech API**: Voice input support via SpeechRecognition (webkit prefixed)
+- **Web Speech API (SpeechSynthesis)**: Voice output support via text-to-speech synthesis
+- **Web Speech API (SpeechRecognition)**: Voice input support via speech-to-text recognition
 - **LocalStorage**: Theme preference persistence
 - **Fetch API**: HTTP client for API communication
+
+## Voice Interaction Flow
+
+1. **Interview Begins**: User selects a role, session starts
+2. **AI Asks Question**: 
+   - Backend generates question via Gemini API
+   - Frontend receives text response
+   - MessageBubble auto-plays text as audio using browser TTS
+   - User hears the question spoken aloud
+3. **User Responds**:
+   - User enables voice input via microphone button
+   - Speech recognition transcribes user's spoken response
+   - User can review transcription and press "Send Response"
+4. **AI Responds**:
+   - Backend processes user response and generates AI response
+   - AI response auto-plays as audio
+   - Feedback is generated and displayed
+5. **Interview Continues**: Cycle repeats for each question
+
+## Components Updated
+
+**New Hooks**
+- `client/src/hooks/use-text-to-speech.ts`: Custom hook for text-to-speech functionality with play/pause/stop controls
+
+**Updated Components**
+- `client/src/components/message-bubble.tsx`: Added audio playback controls with play/pause/stop buttons for AI messages
+- `client/src/components/chat-input.tsx`: Reordered to prioritize voice input as primary method
+- `client/src/pages/interview-session.tsx`: Auto-plays last AI message for seamless voiceover experience
+- `client/src/pages/home.tsx`: Updated description to highlight voiceover capability

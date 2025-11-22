@@ -76,7 +76,17 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
   return (
     <div className="border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <div className="max-w-4xl mx-auto p-4">
-        <div className="flex items-center gap-2 mb-2">
+        <div className="flex items-center gap-2 mb-2 text-xs font-semibold text-muted-foreground">
+          <span>Response Method:</span>
+          <Button
+            variant={mode === "voice" ? "default" : "ghost"}
+            size="sm"
+            onClick={() => setMode("voice")}
+            data-testid="button-mode-voice"
+          >
+            <Mic className="h-4 w-4 mr-2" />
+            Voice (Recommended)
+          </Button>
           <Button
             variant={mode === "text" ? "default" : "ghost"}
             size="sm"
@@ -85,15 +95,6 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
           >
             <Keyboard className="h-4 w-4 mr-2" />
             Text
-          </Button>
-          <Button
-            variant={mode === "voice" ? "default" : "ghost"}
-            size="sm"
-            onClick={() => setMode("voice")}
-            data-testid="button-mode-voice"
-          >
-            <Mic className="h-4 w-4 mr-2" />
-            Voice
           </Button>
         </div>
 

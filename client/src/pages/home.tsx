@@ -88,7 +88,7 @@ export default function Home() {
           <h1 className="text-3xl font-bold mb-3">Choose Your Interview Role</h1>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
             Select a role to begin practicing with our AI interviewer. 
-            Get personalized feedback and improve your interview skills.
+            Speak your responses and hear personalized feedback through voiceover.
           </p>
         </div>
 

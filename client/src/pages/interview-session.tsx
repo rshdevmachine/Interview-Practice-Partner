@@ -182,12 +182,13 @@ export default function InterviewSession() {
             </div>
           ) : (
             <>
-              {messages.map((message) => (
+              {messages.map((message, index) => (
                 <div key={message.id}>
                   <MessageBubble
                     role={message.role as "ai" | "user"}
                     content={message.content}
                     timestamp={new Date(message.createdAt)}
+                    autoSpeak={message.role === "ai" && index === messages.length - 1}
                   />
                   {feedbackList
                     .filter((f) => f.messageId === message.id)
