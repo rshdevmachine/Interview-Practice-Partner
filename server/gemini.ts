@@ -1,7 +1,11 @@
-import OpenAI from "openai";
+import { GoogleGenAI } from "@google/genai";
 
-// the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// DON'T DELETE THIS COMMENT
+// Note that the newest Gemini model series is "gemini-2.5-flash" or "gemini-2.5-pro"
+// do not change this unless explicitly requested by the user
+
+// This API key is from Gemini Developer API Key, not vertex AI API Key
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 interface InterviewContext {
   role: string;
@@ -27,18 +31,24 @@ const rolePrompts: Record<string, string> = {
 export async function getInterviewerResponse(context: InterviewContext): Promise<string> {
   const systemPrompt = rolePrompts[context.role] || rolePrompts.software_engineer;
   
-  const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
-    { role: "system", content: systemPrompt },
-    ...context.messageHistory,
-  ];
-
-  const response = await openai.chat.completions.create({
-    model: "gpt-5",
-    messages,
-    max_completion_tokens: 500,
+  // Convert message history to Gemini format
+  const conversationParts = context.messageHistory.map((msg) => {
+    const role = msg.role === "assistant" ? "model" : "user";
+    return {
+      role,
+      parts: [{ text: msg.content }],
+    };
   });
 
-  return response.choices[0].message.content || "I apologize, but I need you to repeat that.";
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    config: {
+      systemInstruction: systemPrompt,
+    },
+    contents: conversationParts,
+  });
+
+  return response.text || "I apologize, but I need you to repeat that.";
 }
 
 export async function analyzeFeedback(userResponse: string, question: string, role: string): Promise<{
@@ -62,23 +72,35 @@ Provide constructive feedback in JSON format with:
 Focus on communication clarity, relevance, depth of answer, and role-specific competencies.`;
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-5",
-      messages: [
-        {
-          role: "system",
-          content: "You are an expert interview coach providing constructive feedback. Always respond with valid JSON.",
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-pro",
+      config: {
+        systemInstruction: "You are an expert interview coach providing constructive feedback. Always respond with valid JSON.",
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "object",
+          properties: {
+            strengths: {
+              type: "array",
+              items: { type: "string" },
+            },
+            improvements: {
+              type: "array",
+              items: { type: "string" },
+            },
+            suggestions: {
+              type: "array",
+              items: { type: "string" },
+            },
+            overallScore: { type: "number" },
+          },
+          required: ["strengths", "improvements", "suggestions", "overallScore"],
         },
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-      response_format: { type: "json_object" },
-      max_completion_tokens: 800,
+      },
+      contents: prompt,
     });
 
-    const result = JSON.parse(response.choices[0].message.content || "{}");
+    const result = JSON.parse(response.text || "{}");
 
     return {
       strengths: result.strengths || [],
@@ -100,14 +122,13 @@ Focus on communication clarity, relevance, depth of answer, and role-specific co
 export async function generateInitialQuestion(role: string): Promise<string> {
   const systemPrompt = rolePrompts[role] || rolePrompts.software_engineer;
   
-  const response = await openai.chat.completions.create({
-    model: "gpt-5",
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: "Start the interview with a warm greeting and your first question." },
-    ],
-    max_completion_tokens: 300,
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    config: {
+      systemInstruction: systemPrompt,
+    },
+    contents: "Start the interview with a warm greeting and your first question.",
   });
 
-  return response.choices[0].message.content || "Welcome! Let's begin with: Tell me about yourself and why you're interested in this role.";
+  return response.text || "Welcome! Let's begin with: Tell me about yourself and why you're interested in this role.";
 }

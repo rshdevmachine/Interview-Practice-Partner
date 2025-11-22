@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertSessionSchema, insertMessageSchema } from "@shared/schema";
-import { generateInitialQuestion, getInterviewerResponse, analyzeFeedback } from "./openai";
+import { generateInitialQuestion, getInterviewerResponse, analyzeFeedback } from "./gemini";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Get all sessions
