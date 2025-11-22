@@ -3,7 +3,7 @@ import { RoleCard } from "@/components/role-card";
 import { useLocation } from "wouter";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import type { InsertSession } from "@shared/schema";
+import type { InsertSession, Session } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 
 const roles = [
@@ -62,11 +62,11 @@ export default function Home() {
         role,
         status: "active",
       };
-      return await apiRequest<{ id: string }>("POST", "/api/sessions", sessionData);
+      return await apiRequest<Session>("POST", "/api/sessions", sessionData);
     },
-    onSuccess: (data) => {
+    onSuccess: (session) => {
       queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
-      setLocation(`/session/${data.id}`);
+      setLocation(`/session/${session.id}`);
     },
     onError: () => {
       toast({

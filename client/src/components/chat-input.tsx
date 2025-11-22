@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect } from "react";
-import { Mic, MicOff, Send, Keyboard } from "lucide-react";
+import { Mic, MicOff, Send, Keyboard, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface ChatInputProps {
   onSend: (message: string) => void;
@@ -14,8 +16,17 @@ type InputMode = "text" | "voice";
 export function ChatInput({ onSend, disabled }: ChatInputProps) {
   const [mode, setMode] = useState<InputMode>("text");
   const [input, setInput] = useState("");
-  const [isRecording, setIsRecording] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const {
+    isListening,
+    transcript,
+    isSupported,
+    startListening,
+    stopListening,
+    resetTranscript,
+    error: speechError,
+  } = useSpeechRecognition();
 
   const handleSend = () => {
     if (input.trim() && !disabled) {
@@ -32,10 +43,22 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
     }
   };
 
+  const handleVoiceSend = () => {
+    if (transcript.trim() && !disabled) {
+      if (isListening) {
+        stopListening();
+      }
+      onSend(transcript.trim());
+      resetTranscript();
+    }
+  };
+
   const toggleRecording = () => {
-    setIsRecording(!isRecording);
-    // In a real implementation, this would start/stop Web Speech API
-    // For now, it's a visual toggle
+    if (isListening) {
+      stopListening();
+    } else {
+      startListening();
+    }
   };
 
   useEffect(() => {
@@ -43,6 +66,12 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
       textareaRef.current?.focus();
     }
   }, [mode]);
+
+  useEffect(() => {
+    if (mode === "voice") {
+      setInput(transcript);
+    }
+  }, [transcript, mode]);
 
   return (
     <div className="border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
@@ -91,39 +120,82 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
             </Button>
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center py-6 gap-4">
-            <Button
-              size="icon"
-              variant={isRecording ? "destructive" : "default"}
-              className={cn(
-                "h-20 w-20 rounded-full transition-all",
-                isRecording && "animate-pulse"
+          <div className="space-y-4">
+            {!isSupported && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Speech recognition is not supported in your browser. Please use Chrome, Edge, or Safari.
+                </AlertDescription>
+              </Alert>
+            )}
+            {speechError && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{speechError}</AlertDescription>
+              </Alert>
+            )}
+            <div className="flex flex-col items-center justify-center py-6 gap-4">
+              <Button
+                size="icon"
+                variant={isListening ? "destructive" : "default"}
+                className={cn(
+                  "h-20 w-20 rounded-full transition-all",
+                  isListening && "animate-pulse"
+                )}
+                onClick={toggleRecording}
+                disabled={disabled || !isSupported}
+                data-testid="button-record"
+              >
+                {isListening ? (
+                  <MicOff className="h-8 w-8" />
+                ) : (
+                  <Mic className="h-8 w-8" />
+                )}
+              </Button>
+              <p className="text-sm text-muted-foreground">
+                {isListening ? "Listening... Tap to stop" : "Tap to start recording"}
+              </p>
+              {isListening && (
+                <div className="flex gap-1">
+                  {[...Array(5)].map((_, i) => (
+                    <div
+                      key={i}
+                      className="w-1 bg-primary rounded-full animate-pulse"
+                      style={{
+                        height: `${Math.random() * 20 + 10}px`,
+                        animationDelay: `${i * 0.1}s`,
+                      }}
+                    />
+                  ))}
+                </div>
               )}
-              onClick={toggleRecording}
-              disabled={disabled}
-              data-testid="button-record"
-            >
-              {isRecording ? (
-                <MicOff className="h-8 w-8" />
-              ) : (
-                <Mic className="h-8 w-8" />
-              )}
-            </Button>
-            <p className="text-sm text-muted-foreground">
-              {isRecording ? "Recording... Tap to stop" : "Tap to start recording"}
-            </p>
-            {isRecording && (
-              <div className="flex gap-1">
-                {[...Array(5)].map((_, i) => (
-                  <div
-                    key={i}
-                    className="w-1 bg-primary rounded-full animate-pulse"
-                    style={{
-                      height: `${Math.random() * 20 + 10}px`,
-                      animationDelay: `${i * 0.1}s`,
-                    }}
-                  />
-                ))}
+            </div>
+            {transcript && (
+              <div className="space-y-2">
+                <div className="p-4 bg-muted rounded-md">
+                  <p className="text-sm text-muted-foreground mb-1">Transcript:</p>
+                  <p className="text-base">{transcript}</p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleVoiceSend}
+                    disabled={!transcript.trim() || disabled}
+                    className="flex-1"
+                    data-testid="button-send-voice"
+                  >
+                    <Send className="h-4 w-4 mr-2" />
+                    Send Response
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={resetTranscript}
+                    disabled={disabled}
+                    data-testid="button-clear-transcript"
+                  >
+                    Clear
+                  </Button>
+                </div>
               </div>
             )}
           </div>
