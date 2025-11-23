@@ -221,7 +221,6 @@ cd server && npm install
 ### Environment Variables
 ```
 GEMINI_API_KEY=
-DATABASE_URL=
 PORT=5000
 ```
 
