@@ -1,6 +1,10 @@
 # Dependencies
 node_modules/
 .local
+state
+replit
+agent
+
 
 # Build output
 dist/
