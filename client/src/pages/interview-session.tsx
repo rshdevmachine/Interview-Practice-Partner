@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useRoute } from "wouter";
+import { useRoute, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { Session, Message, Feedback } from "@shared/schema";
@@ -11,7 +11,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { StopCircle, Loader2 } from "lucide-react";
-import { useLocation } from "wouter";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,6 +21,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useTextToSpeech } from "@/hooks/use-text-to-speech";
 
 export default function InterviewSession() {
   const [, params] = useRoute("/session/:id");
@@ -31,22 +31,30 @@ export default function InterviewSession() {
   const queryClient = useQueryClient();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showEndDialog, setShowEndDialog] = useState(false);
+  const [localEnded, setLocalEnded] = useState(false); // track if user ended session locally
 
+  // TTS hook
+  const { stop } = useTextToSpeech();
+
+  // Fetch session meta
   const { data: session, isLoading: sessionLoading } = useQuery<Session>({
     queryKey: ["/api/sessions", sessionId],
     enabled: !!sessionId,
   });
 
+  // Fetch messages
   const { data: messages = [], isLoading: messagesLoading } = useQuery<Message[]>({
     queryKey: ["/api/sessions", sessionId, "messages"],
     enabled: !!sessionId,
   });
 
+  // Fetch feedback items (per-message feedback + overall)
   const { data: feedbackList = [] } = useQuery<Feedback[]>({
     queryKey: ["/api/sessions", sessionId, "feedback"],
     enabled: !!sessionId,
   });
 
+  // Send message mutation
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
       return await apiRequest("POST", `/api/sessions/${sessionId}/messages`, {
@@ -66,17 +74,24 @@ export default function InterviewSession() {
     },
   });
 
+  // End session mutation
   const endSessionMutation = useMutation({
     mutationFn: async () => {
       return await apiRequest("POST", `/api/sessions/${sessionId}/end`, {});
     },
     onSuccess: () => {
+      // Refresh session list + this session's messages & feedback so feedback appears
       queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sessions", sessionId, "messages"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sessions", sessionId, "feedback"] });
+
+      // Set local ended so UI can adjust (we keep user on this page so they can review feedback)
+      setLocalEnded(true);
+
       toast({
         title: "Session Ended",
-        description: "Your interview session has been completed.",
+        description: "Generating your post-interview feedback...",
       });
-      setLocation("/");
     },
     onError: () => {
       toast({
@@ -96,15 +111,36 @@ export default function InterviewSession() {
   };
 
   const confirmEndSession = () => {
+    // Immediately stop any TTS playing
+    try {
+      stop();
+    } catch (e) {
+      // ignore if stop fails
+      console.warn("Failed to stop TTS:", e);
+    }
+
     setShowEndDialog(false);
     endSessionMutation.mutate();
   };
 
+  // Keep scroll at bottom when messages change
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // Stop any speech when user navigates away/unmounts
+  useEffect(() => {
+    return () => {
+      try {
+        stop();
+      } catch (e) {
+        // noop
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (sessionLoading) {
     return (
@@ -152,18 +188,27 @@ export default function InterviewSession() {
               {roleLabels[session.role]} Interview
             </h1>
             <p className="text-sm text-muted-foreground">
-              {session.status === "active" ? "In progress" : "Completed"}
+              {session.status === "active" && !localEnded ? "In progress" : "Completed"}
             </p>
           </div>
-          <Button
-            variant="destructive"
-            onClick={handleEndSession}
-            disabled={session.status !== "active" || endSessionMutation.isPending}
-            data-testid="button-end-session"
-          >
-            <StopCircle className="h-4 w-4 mr-2" />
-            End Interview
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* If ended locally, offer to go back home manually */}
+            {localEnded ? (
+              <Button onClick={() => setLocation("/")} variant="ghost">
+                Back to Home
+              </Button>
+            ) : (
+              <Button
+                variant="destructive"
+                onClick={handleEndSession}
+                disabled={session.status !== "active" || endSessionMutation.isPending}
+                data-testid="button-end-session"
+              >
+                <StopCircle className="h-4 w-4 mr-2" />
+                End Interview
+              </Button>
+            )}
+          </div>
         </div>
       </header>
 
@@ -176,9 +221,7 @@ export default function InterviewSession() {
             </div>
           ) : messages.length === 0 ? (
             <div className="text-center py-12">
-              <p className="text-muted-foreground">
-                Waiting for the interview to begin...
-              </p>
+              <p className="text-muted-foreground">Waiting for the interview to begin...</p>
             </div>
           ) : (
             <>
@@ -188,7 +231,7 @@ export default function InterviewSession() {
                     role={message.role as "ai" | "user"}
                     content={message.content}
                     timestamp={new Date(message.createdAt)}
-                    autoSpeak={message.role === "ai" && index === messages.length - 1}
+                    autoSpeak={message.role === "ai" && index === messages.length - 1 && !localEnded}
                   />
                   {feedbackList
                     .filter((f) => f.messageId === message.id)
@@ -205,13 +248,33 @@ export default function InterviewSession() {
               )}
             </>
           )}
+
+          {/* If session ended, show a summary banner + feedback list (if any) */}
+          {localEnded && feedbackList.length === 0 && (
+            <div className="mt-6 bg-yellow-50 border border-yellow-200 p-4 rounded">
+              <p className="text-sm text-yellow-800">
+                Session has ended. Feedback is being generated — please wait a few seconds.
+              </p>
+            </div>
+          )}
+
+          {localEnded && feedbackList.length > 0 && (
+            <div className="mt-6">
+              <h2 className="text-lg font-medium mb-2">Post-Interview Feedback</h2>
+              <div className="space-y-4">
+                {feedbackList.map((fb) => (
+                  <FeedbackCard key={fb.id} feedback={fb} />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </ScrollArea>
 
       <div className="sticky bottom-0">
         <ChatInput
           onSend={handleSendMessage}
-          disabled={session.status !== "active" || sendMessageMutation.isPending}
+          disabled={session.status !== "active" || sendMessageMutation.isPending || localEnded}
         />
       </div>
 
@@ -220,7 +283,7 @@ export default function InterviewSession() {
           <AlertDialogHeader>
             <AlertDialogTitle>End Interview Session?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to end this interview? You'll be able to review the session history later.
+              Are you sure you want to end this interview? You'll be able to review the session history and feedback on this page.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

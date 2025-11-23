@@ -1,11 +1,14 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertSessionSchema, insertMessageSchema } from "@shared/schema";
-import { generateInitialQuestion, getInterviewerResponse, analyzeFeedback } from "./gemini";
+import { insertSessionSchema } from "@shared/schema";
+import { generateInitialQuestion, getInterviewerResponse, analyzeFeedback, generateFinalFeedback } from "./gemini";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Get all sessions
+
+  // ------------------------------------------
+  // GET ALL SESSIONS
+  // ------------------------------------------
   app.get("/api/sessions", async (_req, res) => {
     try {
       const sessions = await storage.getAllSessions();
@@ -15,7 +18,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get single session
+  // ------------------------------------------
+  // GET SINGLE SESSION
+  // ------------------------------------------
   app.get("/api/sessions/:id", async (req, res) => {
     try {
       const session = await storage.getSession(req.params.id);
@@ -28,13 +33,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Create new session
+  // ------------------------------------------
+  // CREATE SESSION + AI INITIAL QUESTION
+  // ------------------------------------------
   app.post("/api/sessions", async (req, res) => {
     try {
       const validatedData = insertSessionSchema.parse(req.body);
+
       const session = await storage.createSession(validatedData);
 
-      // Generate initial question from AI
       const initialQuestion = await generateInitialQuestion(validatedData.role);
       await storage.createMessage({
         sessionId: session.id,
@@ -49,22 +56,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // End session
+  // ------------------------------------------
+  // END SESSION + GENERATE FINAL FEEDBACK (NEW)
+  // ------------------------------------------
   app.post("/api/sessions/:id/end", async (req, res) => {
     try {
-      const session = await storage.getSession(req.params.id);
+      const sessionId = req.params.id;
+      const session = await storage.getSession(sessionId);
       if (!session) {
         return res.status(404).json({ error: "Session not found" });
       }
 
-      await storage.updateSessionStatus(req.params.id, "completed");
-      res.json({ success: true });
+      // 1) Mark completed
+      await storage.updateSessionStatus(sessionId, "completed");
+
+      // 2) Get full conversation history
+      const messages = await storage.getSessionMessages(sessionId);
+
+     const modelHistory = messages.map((m) => ({
+  role: (m.role === "ai" ? "assistant" : "user") as "assistant" | "user",
+  content: m.content,
+}));
+
+
+      // 3) Generate final feedback (NEW PART)
+      const finalFeedback = await generateFinalFeedback(modelHistory, session.role);
+
+      // 4) Store final feedback with messageId = null (session-level feedback)
+      await storage.createFeedback({
+        sessionId,
+        messageId: "",
+        strengths: finalFeedback.strengths,
+        improvements: finalFeedback.improvements,
+        suggestions: finalFeedback.suggestions,
+        overallScore: finalFeedback.overallScore,
+      });
+
+      // 5) Return feedback
+      res.json({ success: true, feedback: finalFeedback });
+
     } catch (error) {
+      console.error("Error ending session:", error);
       res.status(500).json({ error: "Failed to end session" });
     }
   });
 
-  // Get session messages
+  // ------------------------------------------
+  // GET MESSAGES
+  // ------------------------------------------
   app.get("/api/sessions/:id/messages", async (req, res) => {
     try {
       const messages = await storage.getSessionMessages(req.params.id);
@@ -74,7 +113,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Send message and get AI response
+  // ------------------------------------------
+  // SEND MESSAGE → AI RESPONSE → INLINE FEEDBACK
+  // ------------------------------------------
   app.post("/api/sessions/:sessionId/messages", async (req, res) => {
     try {
       const session = await storage.getSession(req.params.sessionId);
@@ -93,14 +134,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         content: req.body.content,
       });
 
-      // Get conversation history
+      // Build conversation for model
       const messages = await storage.getSessionMessages(req.params.sessionId);
       const messageHistory = messages.map((msg) => ({
-        role: msg.role === "ai" ? "assistant" as const : "user" as const,
-        content: msg.content,
-      }));
+  role: (msg.role === "ai" ? "assistant" : "user") as "assistant" | "user",
+  content: msg.content,
+}));
 
-      // Get AI response
+
+      // AI response
       const aiResponse = await getInterviewerResponse({
         role: session.role,
         messageHistory,
@@ -113,18 +155,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         content: aiResponse,
       });
 
-      // Generate feedback for user's response (every 2-3 exchanges)
+      // Inline feedback every 2 user messages
       const userMessageCount = messages.filter((m) => m.role === "user").length;
       if (userMessageCount % 2 === 0) {
-        const lastAiQuestion = messages
-          .filter((m) => m.role === "ai")
-          .slice(-2)[0]?.content || "";
+        const lastAiQuestion =
+          messages.filter((m) => m.role === "ai").slice(-2)[0]?.content || "";
 
-        const feedback = await analyzeFeedback(
-          req.body.content,
-          lastAiQuestion,
-          session.role
-        );
+        const feedback = await analyzeFeedback(req.body.content, lastAiQuestion, session.role);
 
         await storage.createFeedback({
           sessionId: req.params.sessionId,
@@ -137,13 +174,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.json({ userMessage, aiMessage });
+
     } catch (error) {
       console.error("Failed to process message:", error);
       res.status(500).json({ error: "Failed to process message" });
     }
   });
 
-  // Get session feedback
+  // ------------------------------------------
+  // GET ALL FEEDBACK (INLINE + FINAL SUMMARY)
+  // ------------------------------------------
   app.get("/api/sessions/:id/feedback", async (req, res) => {
     try {
       const feedback = await storage.getSessionFeedback(req.params.id);
@@ -153,6 +193,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ------------------------------------------
+  // RETURN HTTP SERVER
+  // ------------------------------------------
   const httpServer = createServer(app);
   return httpServer;
 }
