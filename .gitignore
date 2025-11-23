@@ -6,6 +6,7 @@ replit
 agent
 
 
+
 # Build output
 dist/
 
@@ -25,6 +26,8 @@ yarn-error.log*
 .replit
 replit.nix
 replit.toml
+favicon.png
+
 
 # Vite config temp files
 vite.config.ts.*
