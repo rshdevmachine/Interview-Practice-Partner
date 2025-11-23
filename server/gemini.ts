@@ -3,7 +3,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // Validate API key
 if (!process.env.GEMINI_API_KEY) {
-  throw new Error("❌ Missing GEMINI_API_KEY in environment!");
+  throw new Error("Missing GEMINI_API_KEY in environment!");
 }
 
 // Correct Gemini client
@@ -317,12 +317,7 @@ export async function generateInitialQuestion(role: string): Promise<string> {
   return response.response.text() || 
     "Welcome! Let's begin with: Tell me about yourself and why you're interested in this role.";
 }
-// ---------------------------------------------
-// FINAL FEEDBACK GENERATION — ADD THIS BLOCK
-// ---------------------------------------------
-// -------------------------------------------------------------
-// FINAL FEEDBACK GENERATION (REQUIRED EXPORT)
-// -------------------------------------------------------------
+// FINAL FEEDBACK GENERATION
 export async function generateFinalFeedback(
   history: { role: "assistant" | "user"; content: string }[],
   role: string
