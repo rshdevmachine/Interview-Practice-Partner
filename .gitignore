@@ -1,9 +1,6 @@
 # Dependencies
 node_modules/
-.local
-state
-replit
-agent
+
 
 
 
@@ -22,11 +19,6 @@ yarn-error.log*
 # Environment variables
 .env
 
-# Replit files
-.replit
-replit.nix
-replit.toml
-favicon.png
 
 
 # Vite config temp files
